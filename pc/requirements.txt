@@ -1,0 +1,6 @@
+# PC-side calibration bench
+bleak>=0.22      # BLE central (Nordic UART Service)
+aiohttp>=3.9     # local web UI + websocket
+
+# Only needed for the STM32 bring-up helpers in ../tools/
+# pyocd>=0.36

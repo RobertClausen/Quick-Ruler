@@ -16,3 +16,22 @@ Backup/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# PlatformIO build output
+.pio/
+.pioenvs/
+.piolibdeps/
+.vscode/
+!.vscode/extensions.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Captured calibration data - runs are per-bench, not source
+pc/data/*.csv
+
+# Local editor / agent scratch
+.claude/

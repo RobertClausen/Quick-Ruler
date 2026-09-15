@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IR Sensor Calibration Bench</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --fg:#e6e9ef; --dim:#98a1b3; --accent:#4da3ff; --ok:#3ddc97;
+    --warn:#ffb454; --err:#ff6b6b; --mm:#4da3ff; --v:#ffb454;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:12px 18px;
+         background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}
+  .pill{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);
+        background:var(--panel2);color:var(--dim)}
+  .pill.on{color:#04121a;background:var(--ok);border-color:var(--ok);font-weight:600}
+  .pill.rec{color:#1a0b00;background:var(--warn);border-color:var(--warn);font-weight:600}
+  main{display:grid;grid-template-columns:320px 1fr;gap:14px;padding:14px;align-items:start}
+  @media (max-width:900px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .card h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;
+           letter-spacing:.08em;color:var(--dim);font-weight:600}
+  button{font:inherit;padding:8px 12px;border-radius:7px;border:1px solid var(--line);
+         background:var(--panel2);color:var(--fg);cursor:pointer}
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04121a;font-weight:600}
+  button.danger{background:var(--err);border-color:var(--err);color:#1a0000;font-weight:600}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .devlist{margin-top:10px;max-height:210px;overflow:auto;border:1px solid var(--line);
+           border-radius:8px}
+  .dev{display:flex;justify-content:space-between;align-items:center;gap:8px;
+       padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+  .dev:last-child{border-bottom:0}
+  .dev:hover{background:var(--panel2)}
+  .dev.match{background:rgba(61,220,151,.09)}
+  .dev .nm{font-weight:600}
+  .dev .ad{font-size:11px;color:var(--dim);font-family:ui-monospace,monospace}
+  .readouts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .ro{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:12px}
+  .ro .lbl{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+  .ro .val{font-size:30px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.15}
+  .ro .u{font-size:13px;color:var(--dim);font-weight:400}
+  canvas{width:100%;display:block;border-radius:8px;background:var(--panel2)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);
+        font-variant-numeric:tabular-nums}
+  th{color:var(--dim);font-weight:600;text-align:right;font-size:11px;
+     text-transform:uppercase;letter-spacing:.05em}
+  th:first-child,td:first-child{text-align:left}
+  #log{height:120px;overflow:auto;font:11.5px/1.5 ui-monospace,monospace;
+       background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px}
+  #log div{white-space:pre-wrap}
+  .warn{color:var(--warn)} .error{color:var(--err)} .muted{color:var(--dim)}
+  dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);
+         color:var(--fg);padding:0;width:min(420px,92vw)}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  .dlg-body{padding:18px}
+  dialog h3{margin:0 0 4px;font-size:16px}
+  .field{margin-top:14px}
+  .field label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
+  .field input[type=number],.field input[type=text]{width:100%;padding:9px 10px;
+    border-radius:7px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--fg);font:inherit}
+  .hint{font-size:11.5px;color:var(--dim);margin-top:5px}
+  .dlg-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;
+            border-top:1px solid var(--line);background:var(--panel2)}
+  .bar{height:7px;background:var(--panel2);border:1px solid var(--line);
+       border-radius:999px;overflow:hidden;margin-top:8px}
+  .bar>i{display:block;height:100%;background:var(--warn);width:0}
+  .chk{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>IR Sensor Calibration Bench</h1>
+  <span class="pill" id="connPill">disconnected</span>
+  <span class="pill" id="recPill" hidden>recording</span>
+  <span class="pill" id="linkPill">sensor: —</span>
+  <span style="flex:1"></span>
+  <span class="pill" id="ratePill">— Hz</span>
+</header>
+
+<main>
+  <!-- ---------------- left column ---------------- -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="card">
+      <h2>Device</h2>
+      <div class="row">
+        <button id="btnScan" class="primary">Scan</button>
+        <button id="btnDisc" disabled>Disconnect</button>
+      </div>
+      <label class="chk" style="margin-top:10px">
+        <input id="showAll" type="checkbox"> Show unnamed devices</label>
+      <div class="devlist" id="devlist"><div class="dev muted">no scan yet</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Record</h2>
+      <button id="btnRec" class="primary" style="width:100%" disabled>Record sample…</button>
+      <div id="recProg" hidden>
+        <div class="bar"><i id="recBar"></i></div>
+        <div class="row" style="margin-top:8px;justify-content:space-between">
+          <span class="muted" id="recTxt"></span>
+          <button id="btnStop" class="danger">Stop</button>
+        </div>
+      </div>
+    </div>
+
+
+    <div class="card">
+      <h2>Log</h2>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <!-- ---------------- right column ---------------- -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="card">
+      <div class="readouts">
+        <div class="ro"><div class="lbl">Sample rate</div>
+          <div class="val"><span id="vHz">—</span> <span class="u">Hz</span></div></div>
+        <div class="ro"><div class="lbl">Distance</div>
+          <div class="val"><span id="vMm">—</span> <span class="u">mm</span></div></div>
+        <div class="ro"><div class="lbl">Raw voltage</div>
+          <div class="val"><span id="vV">—</span> <span class="u">V</span></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Live &mdash; distance (mm)</h2>
+      <canvas id="cMm" height="200"></canvas>
+      <h2 style="margin-top:14px">Live &mdash; raw voltage (V)</h2>
+      <canvas id="cV" height="150"></canvas>
+    </div>
+
+    <div class="card">
+      <h2>Calibration curve &mdash; recorded runs</h2>
+      <canvas id="cCal" height="240"></canvas>
+      <div class="hint">Points are the mean raw voltage of each run at its ruler
+        reference, with &plusmn;1&sigma; bars. The dashed line is the nominal
+        Sharp response the firmware currently assumes.</div>
+    </div>
+
+    <div class="card">
+      <h2>Runs</h2>
+      <div style="overflow:auto;max-height:300px">
+        <table id="runs"><thead><tr>
+          <th>Reference</th><th>N</th><th>Hz</th><th>V mean</th><th>V sd</th>
+          <th>Reported</th><th>Error</th><th>CSV</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+      <div class="hint">Every run is written to its own CSV in
+        <code>pc/data/</code>, and appended to <code>calibration_summary.csv</code>.</div>
+    </div>
+  </div>
+</main>
+
+<!-- ---------------- record dialog ---------------- -->
+<dialog id="dlg">
+  <form method="dialog" id="recForm">
+    <div class="dlg-body">
+      <h3>Record a calibration sample</h3>
+      <div class="hint">Point the sensor at a known distance, measured with your ruler.</div>
+
+      <div class="field">
+        <label for="fRate">Sample rate — samples per second</label>
+        <input id="fRate" type="number" value="20" min="1" max="200" step="1" required>
+        <div class="hint">The sensor realistically manages about 20 Hz.</div>
+      </div>
+
+      <div class="field">
+        <label for="fDist">Real distance — measured with the ruler (mm)</label>
+        <input id="fDist" type="number" value="300" min="100" max="800" step="1" required>
+        <div class="hint">Sensor is specified for 100–800 mm.</div>
+      </div>
+
+      <div class="field">
+        <label for="fDur">Duration (s)</label>
+        <input id="fDur" type="number" value="5" min="0.5" max="120" step="0.5" required>
+        <div class="hint" id="fCount">= 100 samples</div>
+      </div>
+
+      <div class="field">
+        <label for="fNote">Note (optional)</label>
+        <input id="fNote" type="text" placeholder="e.g. matte white target">
+      </div>
+
+    </div>
+    <div class="dlg-foot">
+      <button value="cancel">Cancel</button>
+      <button value="go" class="primary" id="dlgGo">Start recording</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+// ---------------------------------------------------------------- state
+const MAXPTS = 600;                       // ~30 s at 20 Hz
+const live = { t: [], mm: [], v: [] };
+let runs = [], connected = false, recording = false, t0 = null;
+
+const $ = id => document.getElementById(id);
+const fmt = (x, d = 1) => (x === null || x === undefined || Number.isNaN(x))
+  ? '—' : Number(x).toFixed(d);
+
+// ---------------------------------------------------------------- charts
+function setupCanvas(cv) {
+  // Capture the authored height ONCE. Reading cv.height on later calls would
+  // return the DPR-scaled backing-store height and the canvas would grow
+  // without bound on every redraw.
+  if (cv._css === undefined) cv._css = cv.height;
+  const r = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv._css;
+  const pw = Math.round(w * r), ph = Math.round(h * r);
+  if (cv.width !== pw || cv.height !== ph) {
+    cv.width = pw; cv.height = ph; cv.style.height = h + 'px';
+  }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(r, 0, 0, r, 0, 0);
+  return { ctx, w, h };
+}
+
+function niceTicks(lo, hi, n = 5) {
+  if (!(hi > lo)) { hi = lo + 1; }
+  const raw = (hi - lo) / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(v);
+  return out;
+}
+
+function drawSeries(cv, xs, ys, color, unit, dec) {
+  const { ctx, w, h } = setupCanvas(cv);
+  const P = { l: 52, r: 10, t: 10, b: 22 };
+  ctx.clearRect(0, 0, w, h);
+
+  const pts = ys.map((y, i) => [xs[i], y]).filter(p => p[1] !== null);
+  if (pts.length < 2) {
+    ctx.fillStyle = '#98a1b3'; ctx.font = '12px system-ui';
+    ctx.fillText('waiting for samples…', P.l, h / 2);
+    return;
+  }
+  const xmin = xs[0], xmax = xs[xs.length - 1] || xmin + 1;
+  let ymin = Math.min(...pts.map(p => p[1])), ymax = Math.max(...pts.map(p => p[1]));
+  const pad = (ymax - ymin) * 0.15 || Math.abs(ymax * 0.1) || 1;
+  ymin -= pad; ymax += pad;
+
+  const X = v => P.l + (v - xmin) / (xmax - xmin || 1) * (w - P.l - P.r);
+  const Y = v => h - P.b - (v - ymin) / (ymax - ymin || 1) * (h - P.t - P.b);
+
+  ctx.strokeStyle = '#2a2f3a'; ctx.fillStyle = '#98a1b3';
+  ctx.font = '10px ui-monospace,monospace'; ctx.lineWidth = 1;
+  for (const tv of niceTicks(ymin, ymax, 4)) {
+    const y = Y(tv);
+    ctx.beginPath(); ctx.moveTo(P.l, y); ctx.lineTo(w - P.r, y); ctx.stroke();
+    ctx.textAlign = 'right'; ctx.fillText(tv.toFixed(dec), P.l - 6, y + 3);
+  }
+  ctx.textAlign = 'center';
+  ctx.fillText('-' + ((xmax - xmin)).toFixed(0) + 's', P.l + 14, h - 6);
+  ctx.fillText('now', w - P.r - 12, h - 6);
+
+  // break the line where samples were out of range
+  ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.beginPath();
+  let pen = false;
+  for (let i = 0; i < ys.length; i++) {
+    if (ys[i] === null) { pen = false; continue; }
+    const x = X(xs[i]), y = Y(ys[i]);
+    if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  const last = pts[pts.length - 1][1];
+  ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.font = '11px ui-monospace,monospace';
+  ctx.fillText(last.toFixed(dec) + ' ' + unit, P.l + 6, P.t + 11);
+}
+
+function drawCal(cv) {
+  const { ctx, w, h } = setupCanvas(cv);
+  const P = { l: 54, r: 12, t: 12, b: 30 };
+  ctx.clearRect(0, 0, w, h);
+  const X = v => P.l + (v - 80) / (820 - 80) * (w - P.l - P.r);
+
+  const pts = runs.map(r => ({
+    x: +r.reference_mm, y: +r.volts_mean, sd: +(r.volts_sd || 0)
+  })).filter(p => isFinite(p.x) && isFinite(p.y));
+
+  let ymax = 2.6, ymin = 0;
+  if (pts.length) ymax = Math.max(0.4, ...pts.map(p => p.y + p.sd)) * 1.15;
+  const Y = v => h - P.b - (v - ymin) / (ymax - ymin) * (h - P.t - P.b);
+
+  ctx.strokeStyle = '#2a2f3a'; ctx.fillStyle = '#98a1b3';
+  ctx.font = '10px ui-monospace,monospace'; ctx.lineWidth = 1;
+  for (const tv of niceTicks(ymin, ymax, 4)) {
+    const y = Y(tv);
+    ctx.beginPath(); ctx.moveTo(P.l, y); ctx.lineTo(w - P.r, y); ctx.stroke();
+    ctx.textAlign = 'right'; ctx.fillText(tv.toFixed(2), P.l - 6, y + 3);
+  }
+  ctx.textAlign = 'center';
+  for (const d of [100, 200, 300, 400, 500, 600, 700, 800]) {
+    ctx.fillText(d, X(d), h - 10);
+  }
+  ctx.fillText('reference distance (mm)', (P.l + w) / 2, h - 20);
+
+  // nominal Sharp curve V = 27.86 * d_cm^-1.15
+  ctx.strokeStyle = '#5a6274'; ctx.setLineDash([5, 4]); ctx.beginPath();
+  for (let d = 100; d <= 800; d += 5) {
+    const v = 27.86 * Math.pow(d / 10, -1.15);
+    const x = X(d), y = Y(v);
+    d === 100 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+
+  for (const p of pts) {
+    const x = X(p.x);
+    if (p.sd > 0) {
+      ctx.strokeStyle = '#4da3ff'; ctx.lineWidth = 1.4; ctx.beginPath();
+      ctx.moveTo(x, Y(p.y - p.sd)); ctx.lineTo(x, Y(p.y + p.sd)); ctx.stroke();
+    }
+    ctx.fillStyle = '#4da3ff'; ctx.beginPath();
+    ctx.arc(x, Y(p.y), 4, 0, 6.2832); ctx.fill();
+  }
+  if (!pts.length) {
+    ctx.fillStyle = '#98a1b3'; ctx.textAlign = 'left'; ctx.font = '12px system-ui';
+    ctx.fillText('no runs recorded yet', P.l + 8, P.t + 18);
+  }
+}
+
+function redraw() {
+  const xs = live.t;
+  drawSeries($('cMm'), xs, live.mm, '#4da3ff', 'mm', 1);
+  drawSeries($('cV'), xs, live.v, '#ffb454', 'V', 3);
+  drawCal($('cCal'));
+}
+
+// ---------------------------------------------------------------- websocket
+let ws;
+function connectWS() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => addLog('UI connected to bench server');
+  ws.onclose = () => { addLog('bench server connection lost — retrying', 'warn');
+                       setTimeout(connectWS, 1500); };
+  ws.onmessage = e => handle(JSON.parse(e.data));
+}
+function send(o) {
+  if (!ws || ws.readyState !== 1) { addLog('not connected to bench server', 'warn'); return; }
+  ws.send(JSON.stringify(o));
+}
+
+function addLog(msg, level = 'info') {
+  const d = document.createElement('div');
+  d.className = level;
+  d.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  $('log').appendChild(d);
+  $('log').scrollTop = 1e9;
+  while ($('log').childElementCount > 300) $('log').firstChild.remove();
+}
+
+function handle(m) {
+  if (m.type === 'sample') {
+    if (t0 === null) t0 = m.ms;
+    live.t.push((m.ms - t0) / 1000);
+    live.mm.push(m.mm);
+    live.v.push(m.v);
+    while (live.t.length > MAXPTS) { live.t.shift(); live.mm.shift(); live.v.shift(); }
+    $('vMm').textContent = m.mm === null ? 'out of range' : fmt(m.mm, 1);
+    $('vV').textContent = fmt(m.v, 3);
+  } else if (m.type === 'status') {
+    connected = m.connected; recording = m.recording;
+    $('connPill').textContent = connected ? (m.name || m.address || 'connected') : 'disconnected';
+    $('connPill').className = 'pill' + (connected ? ' on' : '');
+    $('ratePill').textContent = fmt(m.meas_hz, 1) + ' Hz';
+    $('vHz').textContent = fmt(m.meas_hz, 1);
+    $('btnDisc').disabled = !connected;
+    $('linkPill').textContent = m.link ? 'sensor linked' : 'no sensor link';
+    $('linkPill').className = 'pill' + (m.link ? ' on' : '');
+    $('btnRec').disabled = !connected || recording || !m.link;
+    $('recPill').hidden = !recording;
+    $('recProg').hidden = !recording;
+    if (recording) {
+      const pct = m.rec_target ? 100 * m.rec_have / m.rec_target : 0;
+      $('recBar').style.width = pct.toFixed(1) + '%';
+      $('recTxt').textContent =
+        `${m.rec_have}/${m.rec_target} samples @ ${fmt(m.rec_ref_mm, 0)} mm`;
+    }
+  } else if (m.type === 'scan_result') {
+    renderDevices(m.devices);
+  } else if (m.type === 'runs') {
+    runs = m.runs; renderRuns();
+  } else if (m.type === 'record_done') {
+    const e = m.stats.error_mm;
+    addLog(`run saved: ${m.file}` + (e === null ? '' : ` (error ${e >= 0 ? '+' : ''}${e.toFixed(1)} mm)`));
+  } else if (m.type === 'log') {
+    addLog(m.msg, m.level);
+  }
+}
+
+let lastDevices = [];
+function renderDevices(devs) {
+  lastDevices = devs;
+  const el = $('devlist'); el.innerHTML = '';
+  // A BLE scan is mostly anonymous phones and laptops; hide them unless asked.
+  const shown = $('showAll').checked
+    ? devs : devs.filter(d => d.is_sensor || d.name !== '(unnamed)');
+  if (!shown.length) {
+    el.innerHTML = devs.length
+      ? `<div class="dev muted">${devs.length} unnamed device(s) hidden</div>`
+      : '<div class="dev muted">nothing found</div>';
+    return;
+  }
+  for (const d of shown) {
+    const row = document.createElement('div');
+    row.className = 'dev' + (d.is_sensor ? ' match' : '');
+    row.innerHTML = `<div><div class="nm">${d.name}</div>
+                     <div class="ad">${d.address}</div></div>
+                     <div class="ad">${d.rssi ?? ''} dBm</div>`;
+    row.onclick = () => send({ cmd: 'connect', address: d.address, name: d.name });
+    el.appendChild(row);
+  }
+}
+
+function renderRuns() {
+  const tb = $('runs').querySelector('tbody');
+  tb.innerHTML = '';
+  for (const r of [...runs].reverse()) {
+    const tr = document.createElement('tr');
+    const err = r.error_mm === '' ? '—' :
+      (Number(r.error_mm) >= 0 ? '+' : '') + Number(r.error_mm).toFixed(1);
+    tr.innerHTML = `<td>${Number(r.reference_mm).toFixed(0)} mm</td>
+      <td>${r.n_samples}</td><td>${r.rate_hz}</td>
+      <td>${Number(r.volts_mean).toFixed(4)}</td>
+      <td>${Number(r.volts_sd).toFixed(4)}</td>
+      <td>${r.reported_mm_mean || '—'}</td><td>${err}</td>
+      <td><a href="/data/${r.run_file}" download style="color:var(--accent)">csv</a></td>`;
+    tb.appendChild(tr);
+  }
+  drawCal($('cCal'));
+}
+
+// ---------------------------------------------------------------- wiring
+$('btnScan').onclick = () => { $('devlist').innerHTML =
+  '<div class="dev muted">scanning…</div>'; send({ cmd: 'scan', seconds: 6 }); };
+$('btnDisc').onclick = () => send({ cmd: 'disconnect' });
+$('showAll').onchange = () => renderDevices(lastDevices);
+$('btnStop').onclick = () => send({ cmd: 'stop_record' });
+
+const updCount = () => $('fCount').textContent =
+  '= ' + Math.max(1, Math.round(+$('fRate').value * +$('fDur').value)) + ' samples';
+$('fRate').oninput = updCount; $('fDur').oninput = updCount;
+
+$('btnRec').onclick = () => { updCount(); $('dlg').showModal(); };
+$('recForm').onsubmit = ev => {
+  if (ev.submitter && ev.submitter.value !== 'go') return;
+  send({ cmd: 'start_record', rate_hz: +$('fRate').value,
+         ref_mm: +$('fDist').value, duration_s: +$('fDur').value,
+         note: $('fNote').value });
+};
+
+addEventListener('resize', redraw);
+setInterval(redraw, 100);
+connectWS();
+</script>
+</body>
+</html>
