@@ -12,5 +12,6 @@ This project is made thanks to the my special topic class where to try our best 
 - Seeed Studio ESP32-C3
 - 128x32 OLED display
 - Sharp GP2Y0A21YKOF IR distance sensor
+- M1x8 screws
 
 This project requires soldiering, an open room with good ventilation is advised.
