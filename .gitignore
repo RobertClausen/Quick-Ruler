@@ -1,0 +1,18 @@
+# CAD backup / lock / autosave files
+*.bak
+*.BAK
+*~*
+~$*
+*.dwl
+*.dwl2
+*.sldprt.bak
+*.slddrw.bak
+*.sldasm.bak
+*.SLDLFP
+backup/
+Backup/
+
+# OS cruft
+Thumbs.db
+desktop.ini
+.DS_Store
