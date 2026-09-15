@@ -5,6 +5,9 @@ By using the IR sensor, we can measure the distance between the sensor and the o
 
 This project is made thanks to the my special topic class where to try our best to calibrate a cheap sensor the achieve a fine measurement. In this case, we chosen the IR distance sensor from Sharp that is widely used as a counterpart from the ultrasonic sensor.
 
+![Uploading 6ab4340e-c0da-4cd3-a43c-5337176d39e8.PNG…]()
+
+
 # BOM
 - STM32 Blue pill
 - Seeed Studio ESP32-C3
