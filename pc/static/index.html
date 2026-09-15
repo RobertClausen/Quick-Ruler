@@ -74,6 +74,20 @@
        border-radius:999px;overflow:hidden;margin-top:8px}
   .bar>i{display:block;height:100%;background:var(--warn);width:0}
   .chk{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grid2 label{display:block;font-size:11px;color:var(--dim)}
+  .grid2 input{width:100%;margin-top:3px;padding:7px 8px;border-radius:6px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--fg);font:inherit}
+  .swhead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+  .swhead .big{font-size:40px;font-weight:700;line-height:1.05;
+               font-variant-numeric:tabular-nums;color:var(--warn)}
+  .swhead .big2{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+  #swPanel{border-color:var(--warn)}
+  .steps{max-height:130px;overflow:auto;margin-top:10px;font-size:12px;
+         font-family:ui-monospace,monospace}
+  .steps div{display:flex;justify-content:space-between;padding:2px 0;
+             border-bottom:1px solid var(--line)}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px}
 </style>
 </head>
 <body>
@@ -114,6 +128,23 @@
 
 
     <div class="card">
+      <h2>Calibration sweep</h2>
+      <div class="grid2">
+        <label>Start (mm)<input id="swStart" type="number" value="100" min="20" max="2000" step="1"></label>
+        <label>End (mm)<input id="swEnd" type="number" value="800" min="20" max="2000" step="1"></label>
+        <label>Step (mm)<input id="swStep" type="number" value="5" min="0.5" max="200" step="0.5"></label>
+        <label>Samples / step<input id="swN" type="number" value="100" min="1" max="10000" step="1"></label>
+        <label>Rate (Hz)<input id="swRate" type="number" value="20" min="1" max="200" step="1"></label>
+        <label>Note<input id="swNote" type="text" placeholder="optional"></label>
+      </div>
+      <div class="hint" id="swPlan"></div>
+      <button id="btnSweep" class="primary" style="width:100%;margin-top:10px" disabled>
+        Start sweep…</button>
+      <div class="hint">Every step lands in one CSV, tagged with its reference
+        distance — ready to fit.</div>
+    </div>
+
+    <div class="card">
       <h2>Log</h2>
       <div id="log"></div>
     </div>
@@ -121,6 +152,31 @@
 
   <!-- ---------------- right column ---------------- -->
   <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="card" id="swPanel" hidden>
+      <h2>Sweep in progress</h2>
+      <div class="swhead">
+        <div>
+          <div class="lbl" style="font-size:11px;color:var(--dim)">Place the sensor at</div>
+          <div class="big"><span id="swTarget">—</span>
+            <span style="font-size:16px;color:var(--dim)">mm</span></div>
+        </div>
+        <div style="text-align:right">
+          <div class="lbl" style="font-size:11px;color:var(--dim)">Step</div>
+          <div class="big2"><span id="swIdx">0</span> / <span id="swTotal">0</span></div>
+        </div>
+      </div>
+      <div class="bar"><i id="swBar"></i></div>
+      <div class="row" style="margin-top:10px">
+        <button id="btnCapture" class="primary" style="flex:1">Capture</button>
+        <button id="btnRedo">Redo last</button>
+        <button id="btnSkip">Skip</button>
+        <button id="btnFinishSweep" class="danger">Finish &amp; save</button>
+      </div>
+      <div class="hint" id="swState">press <code>space</code> to capture the current step</div>
+      <div class="hint" id="swFit"></div>
+      <div class="steps" id="swSteps"></div>
+    </div>
+
     <div class="card">
       <div class="readouts">
         <div class="ro"><div class="lbl">Sample rate</div>
@@ -142,9 +198,10 @@
     <div class="card">
       <h2>Calibration curve &mdash; recorded runs</h2>
       <canvas id="cCal" height="240"></canvas>
-      <div class="hint">Points are the mean raw voltage of each run at its ruler
-        reference, with &plusmn;1&sigma; bars. The dashed line is the nominal
-        Sharp response the firmware currently assumes.</div>
+      <div class="hint">Points are the mean raw voltage at each ruler reference,
+        with &plusmn;1&sigma; bars. The dashed grey line is the nominal Sharp
+        response the firmware assumes; the green line is the curve fitted to the
+        sweep in progress.</div>
     </div>
 
     <div class="card">
@@ -204,6 +261,7 @@
 const MAXPTS = 600;                       // ~30 s at 20 Hz
 const live = { t: [], mm: [], v: [] };
 let runs = [], connected = false, recording = false, t0 = null;
+let sweep = null, sweepFit = null;
 
 const $ = id => document.getElementById(id);
 const fmt = (x, d = 1) => (x === null || x === undefined || Number.isNaN(x))
@@ -287,9 +345,13 @@ function drawCal(cv) {
   ctx.clearRect(0, 0, w, h);
   const X = v => P.l + (v - 80) / (820 - 80) * (w - P.l - P.r);
 
-  const pts = runs.map(r => ({
-    x: +r.reference_mm, y: +r.volts_mean, sd: +(r.volts_sd || 0)
-  })).filter(p => isFinite(p.x) && isFinite(p.y));
+  // a live sweep supersedes the older one-off runs
+  const src = (sweep && sweep.steps && sweep.steps.length)
+    ? sweep.steps.map(r => ({ x: +r.reference_mm, y: +r.volts_mean,
+                              sd: +(r.volts_sd || 0) }))
+    : runs.map(r => ({ x: +r.reference_mm, y: +r.volts_mean,
+                       sd: +(r.volts_sd || 0) }));
+  const pts = src.filter(p => isFinite(p.x) && isFinite(p.y));
 
   let ymax = 2.6, ymin = 0;
   if (pts.length) ymax = Math.max(0.4, ...pts.map(p => p.y + p.sd)) * 1.15;
@@ -316,6 +378,18 @@ function drawCal(cv) {
     d === 100 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.stroke(); ctx.setLineDash([]);
+
+  // the curve fitted to this sweep, drawn solid over the nominal one
+  if (sweepFit) {
+    ctx.strokeStyle = '#3ddc97'; ctx.lineWidth = 1.8; ctx.beginPath();
+    let started = false;
+    for (let d = 90; d <= 820; d += 4) {
+      const v = sweepFit.K * Math.pow(d / 10, -sweepFit.E);
+      const x = X(d), y = Y(v);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke(); ctx.lineWidth = 1;
+  }
 
   for (const p of pts) {
     const x = X(p.x);
@@ -389,6 +463,14 @@ function handle(m) {
       $('recTxt').textContent =
         `${m.rec_have}/${m.rec_target} samples @ ${fmt(m.rec_ref_mm, 0)} mm`;
     }
+    renderSweep(m.sweep);
+  } else if (m.type === 'sweep_step') {
+    // step banked; status carries the full picture
+  } else if (m.type === 'sweep_done') {
+    const f = m.fit;
+    addLog(`sweep saved: ${m.file} (${m.n_steps} steps, ${m.n_samples} samples)`);
+    if (f) addLog(`fit  V = ${f.K.toFixed(3)} * d_cm^-${f.E.toFixed(4)}   ` +
+                  `R2 = ${f.r2.toFixed(5)}`);
   } else if (m.type === 'scan_result') {
     renderDevices(m.devices);
   } else if (m.type === 'runs') {
@@ -402,6 +484,44 @@ function handle(m) {
 }
 
 let lastDevices = [];
+function renderSweep(sw) {
+  sweep = sw;
+  const on = !!sw;
+  $('swPanel').hidden = !on;
+  $('btnSweep').disabled = on || !connected;
+  $('btnRec').disabled = $('btnRec').disabled || on;
+  if (!on) { sweepFit = null; drawCal($('cCal')); return; }
+
+  $('swTarget').textContent = sw.target_mm === null ? 'done' : fmt(sw.target_mm, 1);
+  $('swIdx').textContent = Math.min(sw.idx + 1, sw.total);
+  $('swTotal').textContent = sw.total;
+
+  const pct = sw.capturing ? 100 * sw.have / Math.max(1, sw.need)
+                           : 100 * sw.idx / Math.max(1, sw.total);
+  $('swBar').style.width = pct.toFixed(1) + '%';
+
+  $('swState').innerHTML = sw.capturing
+    ? `capturing ${sw.have}/${sw.need} samples — hold position`
+    : `position the sensor, then press <code>space</code> or Capture`;
+  $('btnCapture').textContent = sw.capturing ? 'Capturing…' : 'Capture';
+  $('btnCapture').disabled = sw.capturing || sw.finished;
+
+  sweepFit = sw.fit;
+  $('swFit').textContent = sw.fit
+    ? `fit so far:  V = ${sw.fit.K.toFixed(3)} · d_cm^-${sw.fit.E.toFixed(4)}` +
+      `   (R² = ${sw.fit.r2.toFixed(5)}, ${sw.fit.n} pts)`
+    : 'fit appears once 3 steps are captured';
+
+  const el = $('swSteps'); el.innerHTML = '';
+  for (const st of [...sw.steps].reverse().slice(0, 40)) {
+    const d = document.createElement('div');
+    d.innerHTML = `<span>${Number(st.reference_mm).toFixed(1)} mm</span>` +
+                  `<span>${st.volts_mean} ± ${st.volts_sd} V  (n=${st.n_samples})</span>`;
+    el.appendChild(d);
+  }
+  drawCal($('cCal'));
+}
+
 function renderDevices(devs) {
   lastDevices = devs;
   const el = $('devlist'); el.innerHTML = '';
@@ -448,6 +568,40 @@ $('btnScan').onclick = () => { $('devlist').innerHTML =
   '<div class="dev muted">scanning…</div>'; send({ cmd: 'scan', seconds: 6 }); };
 $('btnDisc').onclick = () => send({ cmd: 'disconnect' });
 $('showAll').onchange = () => renderDevices(lastDevices);
+
+const swPlan = () => {
+  const a = +$('swStart').value, b = +$('swEnd').value, st = +$('swStep').value;
+  const n = (st > 0 && b >= a) ? Math.round((b - a) / st) + 1 : 0;
+  const samples = n * +$('swN').value;
+  const secs = samples / Math.max(1, +$('swRate').value);
+  $('swPlan').textContent = n
+    ? `${n} steps, ${samples} samples, ~${Math.round(secs / 60)} min of capture ` +
+      `(plus the time you spend repositioning)`
+    : 'check the start / end / step values';
+};
+['swStart', 'swEnd', 'swStep', 'swN', 'swRate'].forEach(
+  id => $(id).oninput = swPlan);
+swPlan();
+
+$('btnSweep').onclick = () => send({
+  cmd: 'start_sweep', start_mm: +$('swStart').value, end_mm: +$('swEnd').value,
+  step_mm: +$('swStep').value, samples: +$('swN').value,
+  rate_hz: +$('swRate').value, note: $('swNote').value });
+$('btnCapture').onclick = () => send({ cmd: 'capture_step' });
+$('btnRedo').onclick = () => send({ cmd: 'redo_step' });
+$('btnSkip').onclick = () => send({ cmd: 'skip_step' });
+$('btnFinishSweep').onclick = () => {
+  if (confirm('Finish the sweep and save what has been captured?'))
+    send({ cmd: 'finish_sweep' });
+};
+
+// one hand on the ruler, one on the keyboard
+addEventListener('keydown', ev => {
+  if (ev.code !== 'Space' || !sweep || sweep.capturing || sweep.finished) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+  ev.preventDefault();
+  send({ cmd: 'capture_step' });
+});
 $('btnStop').onclick = () => send({ cmd: 'stop_record' });
 
 const updCount = () => $('fCount').textContent =

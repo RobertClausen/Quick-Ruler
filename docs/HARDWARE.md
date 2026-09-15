@@ -121,9 +121,11 @@ shows a `Linked to <name>` banner for 2.5 s, then keeps the name in the
 bottom-right corner, truncated to the space left by the voltage readout.
 The device name itself is `DEVICE_NAME` at the top of `src/main.cpp`.
 
-**Record sample…** asks for the sample rate and the real ruler distance (plus a
-duration, shown live as a sample count, and an optional note), commands the
-device to that rate, captures the run, and writes:
+There are two capture modes. **Start sweep…** walks the whole range in steps and
+puts every sample into a single CSV — see the README. **Record sample…** is the
+single-distance spot check: it asks for the sample rate and the real ruler
+distance (plus a duration, shown live as a sample count, and an optional note),
+commands the device to that rate, captures the run, and writes:
 
 - `pc/data/run_<dist>mm_<timestamp>.csv` — every sample:
   `seq, device_ms, host_time, adc, volts, reported_mm, reference_mm, in_range`

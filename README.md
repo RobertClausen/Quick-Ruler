@@ -58,12 +58,48 @@ pip install -r pc/requirements.txt
 python3 pc/calib_server.py     # then open http://127.0.0.1:8765
 ```
 
-Scan for the sensor, click it to connect, then **Record sample…** asks for a
-sample rate and the real distance you measured with a ruler. Each run is written
-to `pc/data/run_<distance>mm_<timestamp>.csv` with every raw sample, and
-appended to `pc/data/calibration_summary.csv` with mean/σ voltage and the error
-against your ruler. Captured runs are gitignored — they belong to your bench,
-not the repo.
+Scan for the sensor and click it to connect.
+
+### Calibration sweep — the whole range in one CSV
+
+Set a start, an end, a step and a sample count (defaults: 100 → 800 mm in 5 mm
+steps, 100 samples each — 141 steps), then **Start sweep…**. The bench walks you
+through it one position at a time:
+
+1. it shows the distance to move to, big
+2. you position the sensor against the ruler
+3. press **space** (or click Capture) and hold still while it takes the samples
+4. it advances to the next distance automatically
+
+**Redo last** re-takes the previous step if you fumbled one, **Skip** passes over
+a distance you cannot reach, and **Finish & save** ends early keeping everything
+captured so far. Both files are rewritten after every step, so a long session
+survives a crash.
+
+The whole sweep lands in **one** file:
+
+| File | Contents |
+|---|---|
+| `sweep_<start>-<end>mm_<timestamp>.csv` | every sample of every step, tagged with `step` and `reference_mm` |
+| `sweep_..._steps.csv` | one row per distance: mean/σ/min/max voltage — the fit-ready table |
+
+Feed `reference_mm` against `volts_mean` from the steps file into Excel to fit
+the curve. The bench also fits it live as you go, in log-log space, and shows
+
+```
+V = K · d_cm^-E        →        d_mm = 10 · (K / V)^(1/E)
+```
+
+with its R², so you can see the curve forming and catch a bad run before you
+have spent an hour on it. The fitted curve is drawn over the points in green.
+
+### Single spot check
+
+**Record sample…** still captures one distance to its own
+`run_<distance>mm_<timestamp>.csv`, appended to `calibration_summary.csv` —
+handy for verifying the rig before committing to a full sweep.
+
+Captured data is gitignored: it belongs to your bench, not the repo.
 
 The STM32 sends **raw ADC counts, never millimetres**: the distance curve lives
 on the ESP32/PC side, so recalibrating never means reflashing the sensor board.
