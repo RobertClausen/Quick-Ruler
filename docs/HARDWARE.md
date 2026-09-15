@@ -80,6 +80,24 @@ cd firmware/esp32-xiao-c3 && pio run -t upload --upload-port /dev/ttyACM0
 3. **`Serial.setTxTimeoutMs(0)` silently discards output** when the host has
    not asserted DTR — indistinguishable from a crash. Leave it at the default.
 
+### OLED layout
+
+```
+ 3..16   distance, 10x20         |  right: measured rate
+ 17      tick marks every 100 mm
+ 18..22  distance bar, 100..800 mm, fills left to right
+ 24..31  raw voltage             |  right: REC / connected host / BLE
+```
+
+The bar spans the sensor's full usable range. Its 126 px of fill is linear in
+distance, so 450 mm sits exactly halfway. Out of range the digits read `---`
+and a 4 px stub pegs to whichever end was exceeded, keeping "too close" and
+"too far" distinguishable instead of both showing an empty bar.
+
+Vertical space is the constraint: the distance digits have no descenders so
+they stop at row 16, and the bottom row's 6x10 text starts at row 24, which
+leaves rows 17..22 for the scale.
+
 ### BLE protocol (Nordic UART Service)
 
 Notifications, newline-terminated (a notification may split mid-line — the

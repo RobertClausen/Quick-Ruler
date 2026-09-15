@@ -211,6 +211,42 @@ static void drawRightFit(const char *s, int y, int maxw) {
   u8g2.drawStr(128 - u8g2.getStrWidth(tmp), y, tmp);
 }
 
+// A 100..800 mm scale across the full width: the fill grows left to right as
+// the target gets further away. Ticks every 100 mm sit just above the frame.
+//
+// Vertical budget on a 128x32 panel is tight. The distance digits have no
+// descenders so they end at y=16, the bottom row's 6x10 text starts at y=24,
+// which leaves rows 17..22 for this.
+static void drawDistanceBar() {
+  const int BAR_Y = 18, BAR_H = 5;      // frame occupies rows 18..22
+  const int INNER_X = 1, INNER_W = 126; // inside the 1px frame
+
+  for (int d = 200; d < (int)DIST_MAX_MM; d += 100) {
+    int x = INNER_X + (int)lroundf((d - DIST_MIN_MM) /
+                                   (DIST_MAX_MM - DIST_MIN_MM) * (INNER_W - 1));
+    u8g2.drawPixel(x, 17);
+  }
+
+  u8g2.drawFrame(0, BAR_Y, 128, BAR_H);
+
+  if (isnan(g_dist_mm)) return;
+
+  if (g_in_range) {
+    float f = (g_dist_mm - DIST_MIN_MM) / (DIST_MAX_MM - DIST_MIN_MM);
+    f = constrain(f, 0.0f, 1.0f);
+    int w = (int)lroundf(f * INNER_W);
+    if (w > 0) u8g2.drawBox(INNER_X, BAR_Y + 1, w, BAR_H - 2);
+  } else {
+    // out of range: peg a stub to whichever end we fell off, so "too close"
+    // and "too far" stay distinguishable rather than both reading as empty
+    int stub = 4;
+    if (g_dist_mm < DIST_MIN_MM)
+      u8g2.drawBox(INNER_X, BAR_Y + 1, stub, BAR_H - 2);
+    else if (g_dist_mm > DIST_MAX_MM)
+      u8g2.drawBox(INNER_X + INNER_W - stub, BAR_Y + 1, stub, BAR_H - 2);
+  }
+}
+
 static void drawScreen() {
   char buf[24];
   u8g2.clearBuffer();
@@ -254,7 +290,7 @@ static void drawScreen() {
   snprintf(buf, sizeof(buf), "%.1fHz", g_meas_hz);
   u8g2.drawStr(128 - u8g2.getStrWidth(buf), 9, buf);
 
-  u8g2.drawHLine(0, 20, 128);
+  drawDistanceBar();
 
   // bottom-left: raw voltage
   snprintf(buf, sizeof(buf), "%.3f V", g_volts);
